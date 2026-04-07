@@ -442,17 +442,50 @@ dotProduct ring xs ys =
   go (Ring.zero ring) xs ys
 ```
 
-### Important: No `let` Keyword
+### Bindings in blocks
 
-Unison doesn't use a `let` keyword for bindings within blocks. Simply write the name followed by `=`:
+Inside a block (a function body, a `do` block, a `cases` arm body, etc.), write bindings as plain `name = expr`:
 
 ```
--- CORRECT:
 nextAcc = Ring.add ring acc (Ring.mul ring x y)
-
--- INCORRECT:
-let nextAcc = Ring.add ring acc (Ring.mul ring x y)
 ```
+
+### `let` introduces a block (no `in`)
+
+`let` exists in Unison and introduces a new block, but there is **no `in`** — the block continues via indentation, like a `do` block but without laziness:
+
+```
+-- CORRECT: let introduces a block, no `in`
+f x = let
+  y = x + 1
+  y * 2
+
+-- INCORRECT: let...in is not valid Unison
+f x = let y = x + 1 in y * 2
+```
+
+### Multi-statement lambda bodies with `let`
+
+A lambda `x -> expr` can only contain a single expression. To run multiple statements inside a parenthesised lambda, use `let` to introduce a block:
+
+```
+-- CORRECT: let inside a lambda gives a multi-statement body
+List.foreach (x -> let
+  line = "item: " ++ Text.show x
+  printLine line) xs
+
+-- ALSO CORRECT for a single trailing lambda at the end of a block
+-- (trailing lambda syntax — only valid as the last statement):
+List.foreach xs x ->
+  doSomething x
+  doSomethingElse x
+```
+
+**Key rules:**
+- `(x -> let ...)` — multi-statement lambda anywhere; `let` introduces the block
+- `f xs x -> body` trailing syntax — only valid as the **last** statement in a block; the body is a full block
+- `=` bindings are **not** valid inside `(x -> ...)` without a `let`; extract a named helper or use `let`
+- `do` makes a thunk `'{g} a`; `let` is an eager block — do not use `do` where you need a function `a ->{g} b`
 
 ### No `where` Clauses
 
