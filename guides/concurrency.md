@@ -307,3 +307,84 @@ withTimeout microseconds computation =
       result = computation()
       Remote.pure (Right result))
 ```
+
+## IO-based concurrency (non-Remote)
+
+When using `IO` instead of `Remote` (the common case in the http library), use these primitives from `lib.unison_base` and `lib.systemfw_concurrent`:
+
+### IO Refs
+
+```
+-- Create a mutable reference
+ref : Ref {IO} a
+ref = IO.ref initialValue
+
+-- Read and write
+value = Ref.read ref
+Ref.write ref newValue
+```
+
+### Mutex (from systemfw_concurrent)
+
+```
+-- Create an unlocked mutex
+m : Mutex
+m = Mutex.new()    -- Mutex.new is a thunk: '{IO} Mutex
+
+-- Acquire/release explicitly
+Mutex.acquire m
+Mutex.release m
+
+-- Or use the bracketed form (recommended)
+withMutex m do
+  -- critical section
+```
+
+### ConcurrentMap (from systemfw_concurrent)
+
+**IMPORTANT:** The argument order is always **map first, key second**:
+
+```
+-- Create an empty concurrent map (it is a THUNK — call with ())
+m : ConcurrentMap k v
+m = ConcurrentMap.empty()
+
+-- Lookup: map first, key second
+ConcurrentMap.lookup : ConcurrentMap k v -> k ->{IO} Optional v
+result = ConcurrentMap.lookup m key
+
+-- Insert: map first, key second, value third
+ConcurrentMap.put : ConcurrentMap k v -> k -> v ->{IO} ()
+ConcurrentMap.put m key value
+
+-- General alter (insert/delete/modify + return a value)
+ConcurrentMap.alter : ConcurrentMap k v -> k -> (Optional v -> (Change v, a)) ->{IO} a
+```
+
+### Promise (from unison_base)
+
+```
+-- Create an empty promise (it is a THUNK — call with ())
+p : Promise a
+p = Promise.new()
+
+-- Write to a promise (returns true if it was empty, false if already filled)
+_ = Promise.write p value
+
+-- Blocking read
+result = Promise.read p
+```
+
+### Threads (from systemfw_concurrent)
+
+```
+-- Fork a thread scoped to the current Threads scope (cancelled when scope exits)
+Threads.fork_ : '{IO, Exception, Random, Threads} () ->{Threads} ()
+Threads.fork_ do
+  -- work here
+
+-- Detach a thread (lives beyond its spawning scope; caller must cancel)
+t = detach do
+  -- work here
+Threads.cancel t   -- when done
+```

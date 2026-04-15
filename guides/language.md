@@ -487,6 +487,73 @@ List.foreach xs x ->
 - `=` bindings are **not** valid inside `(x -> ...)` without a `let`; extract a named helper or use `let`
 - `do` makes a thunk `'{g} a`; `let` is an eager block — do not use `do` where you need a function `a ->{g} b`
 
+### `if-then` without `else` in multi-statement blocks
+
+In a multi-statement block, always write `else ()` explicitly when the `then` branch returns `()`. Without it, the parser may consume the next statement as the implicit `else` branch, causing confusing type errors or silent mis-parses.
+
+```
+-- DANGEROUS: the parser may treat `nextStatement` as the else branch
+if cond then doSomething()
+nextStatement
+
+-- CORRECT: explicit else ()
+if cond then doSomething()
+else ()
+nextStatement
+```
+
+This is especially important when there are further statements (or the function's final return expression) after the `if`.
+
+### Zero-argument recursive thunks
+
+When you need a recursive helper with no parameters that uses abilities (IO, Exception, etc.), define it as a `do` thunk and call it with `()`:
+
+```
+-- WRONG: `go` is a value binding, not a thunk; ability access fails
+go =
+  buf = Ref.read bufRef   -- needs {IO}
+  go
+
+-- CORRECT: `do` makes `go` a thunk of type '{IO} a
+go : '{IO} Bytes
+go = do
+  buf = Ref.read bufRef
+  go()    -- recursive thunk call
+go()
+```
+
+The type annotation is optional but helps readability.
+
+### Constructor pattern bindings require `match`, not `let`
+
+You cannot use a top-level let-binding to destructure a single-constructor type with a fully-qualified constructor name. The pattern binding form `Constructor var = expr` does not bring `var` into scope reliably — the compiler treats it as an unresolved name.
+
+**WRONG:**
+```
+http2.IncomingQueue.IncomingQueue qRef = q
+-- qRef is NOT in scope below this line
+```
+
+**CORRECT:** use an explicit `match`:
+```
+match q with
+  http2.IncomingQueue.IncomingQueue r -> go r
+```
+
+Or for single-use unwrapping, inline it:
+```
+go r = ...
+match q with MyType.Constructor r -> go r
+```
+
+**Why:** Unison's let-pattern binding does not reliably introduce variables when the constructor name is qualified (dotted). Use `match` instead.
+
+### Common type conversions
+
+- `Nat.toInt : Nat -> Int` — convert a natural number to an integer (there is no `Int.fromNat`)
+- `Text.fromUtf8 : Bytes ->{Exception} Text` — raises on invalid UTF-8
+- `toUtf8 : Text -> Bytes`
+
 ### No `where` Clauses
 
 Unison doesn't have `where` clauses. Helper functions must be defined in the main block before they're used.
