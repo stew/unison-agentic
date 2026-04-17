@@ -461,42 +461,94 @@ Inside a block (a function body, a `do` block, a `cases` arm body, etc.), write 
 nextAcc = Ring.add ring acc (Ring.mul ring x y)
 ```
 
-### `let` introduces a block (no `in`)
+### `let` and `do`: two ways to introduce a block
 
-`let` exists in Unison and introduces a new block, but there is **no `in`** — the block continues via indentation, like a `do` block but without laziness:
+Both `let` and `do` introduce a multi-statement block (a sequence of bindings followed by a final expression). The difference is laziness:
+
+| | Introduces | Type |
+|---|---|---|
+| `let` | an **eager** block | evaluates immediately |
+| `do` | a **lazy** block (thunk) | wraps in `'` — call with `()` to run |
 
 ```
--- CORRECT: let introduces a block, no `in`
+-- let: eager block, evaluates now
 f x = let
   y = x + 1
   y * 2
 
+-- do: lazy block, produces a thunk of type '{IO} ()
+action : '{IO} ()
+action = do
+  printLine "hello"
+  printLine "world"
+```
+
+There is **no `in`** — both `let` and `do` use indentation to delimit the block:
+
+```
 -- INCORRECT: let...in is not valid Unison
 f x = let y = x + 1 in y * 2
+
+-- CORRECT
+f x = let
+  y = x + 1
+  y * 2
 ```
 
-### Multi-statement lambda bodies with `let`
+### Using `let` in multi-statement lambdas
 
-A lambda `x -> expr` can only contain a single expression. To run multiple statements inside a parenthesised lambda, use `let` to introduce a block:
+A lambda `x -> expr` only accepts a single expression. Use `let` to give it a multi-statement body:
 
 ```
--- CORRECT: let inside a lambda gives a multi-statement body
+-- CORRECT: let inside a lambda
 List.foreach (x -> let
   line = "item: " ++ Text.show x
   printLine line) xs
+```
 
--- ALSO CORRECT for a single trailing lambda at the end of a block
--- (trailing lambda syntax — only valid as the last statement):
+Do **not** use `do` here — `do` makes a thunk, not a function:
+
+```
+-- WRONG: do produces '{IO} () not (Nat ->{IO} ())
+List.foreach (x -> do
+  line = "item: " ++ Text.show x
+  printLine line) xs
+```
+
+Trailing lambda syntax (no parens, only valid as the **last** statement in a block) also gives a full block body without needing `let`:
+
+```
 List.foreach xs x ->
   doSomething x
   doSomethingElse x
 ```
 
-**Key rules:**
-- `(x -> let ...)` — multi-statement lambda anywhere; `let` introduces the block
-- `f xs x -> body` trailing syntax — only valid as the **last** statement in a block; the body is a full block
-- `=` bindings are **not** valid inside `(x -> ...)` without a `let`; extract a named helper or use `let`
-- `do` makes a thunk `'{g} a`; `let` is an eager block — do not use `do` where you need a function `a ->{g} b`
+### Using `let` inside a `|>` pipeline
+
+`let` is also handy for naming an intermediate result mid-pipeline without breaking the chain:
+
+```
+result =
+  someList
+    |> List.map f
+    |> let
+         filtered = List.filter p
+         List.sortBy key filtered
+    |> List.take 10
+```
+
+Or more commonly, just bind the intermediate value before the pipeline resumes:
+
+```
+result =
+  step1 = someList |> List.map f |> List.filter p
+  step1 |> List.sortBy key |> List.take 10
+```
+
+**Summary of key rules:**
+- Use `let` for an eager multi-statement block (inside lambdas, mid-pipeline, or anywhere you need bindings that evaluate immediately)
+- Use `do` only when you want a **thunk** `'{g} a` — a value that defers execution until called with `()`
+- Never write `let ... in` — there is no `in` in Unison
 
 ### `if-then` without `else` in multi-statement blocks
 
