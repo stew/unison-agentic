@@ -90,6 +90,17 @@ type Optional a = None | Some a
 type Either a b = Left a | Right b
 ```
 
+### Unique types vs structural types
+
+Unison has two kinds of user-defined types:
+
+- **Unique types** (the default): `type Foo = ...` or equivalently `unique type Foo = ...`. Each definition gets a unique identity (a UUID baked in at definition time), so two types with the same structure are still distinct. This is almost always what you want.
+- **Structural types**: `structural type Foo = ...`. These are compared purely by structure, like tuples. Two structural types with identical fields are interchangeable.
+
+**Always use plain `type`. Never write `structural type`.**
+
+Structural types make it easy to accidentally confuse two unrelated types that happen to have the same shape, and they offer no practical advantage in normal code. If you find yourself reaching for `structural type`, use a unique type instead.
+
 Pattern matching works as you would expect:
 
 ```
