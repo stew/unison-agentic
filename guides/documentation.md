@@ -32,13 +32,50 @@ List.map f xs =
 ## Documentation Features
 
 ### Inline Code
-Use single backticks for inline code references:
-- `` `List.map` `` - references a function name
-- `` `xs` `` - references a parameter
+
+Use single backticks for **literal** inline text:
+
+```
+`List.map` — renders as `List.map`, not typechecked
+`xs` — a parameter name, rendered as-is
+`run deploy.level1` — a UCM command, rendered as-is
+```
+
+### Typechecked Code Snippets (Double Backticks)
+
+**IMPORTANT**: Double backticks are **not** "bolder inline code" — they contain Unison expressions that are **typechecked at submit time**:
+
+```
+``List.map f xs`` — Unison parses this as an expression
+                   and requires `List.map`, `f`, `xs` to resolve
+```
+
+This means double-backtick content must be valid Unison. Things that break:
+
+- ``` ``run deploy.level1`` ``` — Unison looks up `run` and `deploy.level1` as terms. `run` is ambiguous (there are many `.run` in scope); `deploy.level1` doesn't exist until you've defined it. **Use single backticks for UCM commands** or plain text.
+- ``` ``#abc123...`` ``` — parsed as a hash literal and rejected because `#abc123...` isn't a valid hash. **Don't put fake hashes in double backticks.**
+
+Rule of thumb: single backticks for text, double backticks for executable Unison.
+
+### Term and Type Links
+
+Link to other definitions with `{...}`:
+
+```
+{List.map}          -- term link: clickable ref to List.map
+{type Optional}     -- type link: clickable ref to the Optional type
+{Optional.Some}     -- term link to a constructor
+```
+
+Term links are how you cross-reference definitions in docs. They render as clickable names and move with renames. Use them instead of naked backticks when you mean "the thing named X".
 
 ### Function Signatures in Examples
-Use double backticks to show function application examples:
-- ``` ``List.map f xs`` ``` - shows example usage with arguments
+
+Use double backticks to show function application examples — because they really are typechecked Unison expressions:
+
+```
+``List.map f xs`` — shows example usage with arguments; parses as Unison
+```
 
 ### Markdown Support
 Documentation blocks support standard markdown:

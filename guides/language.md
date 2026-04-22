@@ -353,6 +353,93 @@ Ring.zero ring
 
 Record types in Unison generate functions, not special field syntax.
 
+## Content addressing: names vs hashes
+
+Unison stores definitions by content hash, not by name. Names are just pointers to hashes. This has two consequences that trip up people used to text-based languages:
+
+### 1. Equal bodies share a hash
+
+Two top-level terms with identical bodies have the **same hash**, and therefore references in other code can't tell them apart:
+
+```
+game.protocol.version : Nat
+game.protocol.version = 3
+
+game.client.sprites.startId : Nat
+game.client.sprites.startId = 3
+```
+
+Both `version` and `startId` resolve to the hash of `Nat 3`. If you write `if clientVer == version` in a function body, Unison binds that reference at parse time to "the hash for `3`" — which at display time may render as `startId` or `version` depending on which name UCM picks.
+
+**The functional meaning is unaffected** — `version` and `startId` are both `3`, so comparisons still work. But if you later redefine one of them (`version = 4`), existing dependents still point to the old hash (`3`) and will be displayed under whichever of the remaining names UCM picks.
+
+**Fix**: if you have two conceptually distinct constants that happen to share a value, wrap one in a unique type so their hashes diverge:
+
+```
+type ProtocolVersion = ProtocolVersion Nat
+
+protocol.version : ProtocolVersion
+protocol.version = ProtocolVersion 3
+
+-- Now `ProtocolVersion 3` has a distinct hash from plain `3`
+-- and semantic comparisons must unwrap.
+```
+
+Or use an explicit `Text` representation, or any other structural disambiguator.
+
+### 2. Changing a term's body creates a new hash
+
+When you edit a term's definition, the new body has a new hash. The name `foo` moves to point at the new hash; anything that used `foo` by name is fine after a re-submit of its source (the typechecker re-resolves the name). But anything that captured a reference to the old hash — e.g., code that hasn't been re-submitted — still points at the old body.
+
+**In practice**: after you change a core definition's value (like bumping `version = 3` to `version = 4`), you may need to **re-submit the source of each caller** that semantically references it, to pin their reference to the new hash. Without that, they display as referring to "some other term with the same old value" — e.g., `startId` if `startId` still equals the old value.
+
+### 3. Structural types collapse by shape
+
+`structural type SubPos = { col : Nat, row : Nat }` has the **same hash** as `structural type Pos = { x : Nat, y : Nat }` (both are two-Nat records). They are literally the same type. Constructors and accessors from one are aliases for the other.
+
+Always use `type` (unique) rather than `structural type` unless you specifically want this collapsing behavior.
+
+### 4. Cascading updates when types change
+
+Changing the shape of a type (adding a constructor, changing field arity) invalidates every match/constructor site that mentions it. UCM's `update-definitions` will collect those still-broken definitions into the source file for you, with a comment `-- The definitions below no longer typecheck`. Fix them and re-submit as one atomic batch.
+
+### 5. No inline type ascription in expressions
+
+Unison does not accept `expr : Type` inline in most positions. This **does not work**:
+
+```
+-- WRONG
+x = ServiceHash brainHashText : ServiceHash AsyncControls ()
+```
+
+Use a separate top-level signature, or rely on type inference from context:
+
+```
+-- RIGHT (separate signature)
+x : ServiceHash AsyncControls ()
+x = ServiceHash brainHashText
+
+-- RIGHT (let inference do the work)
+runAsyncSession level (ServiceHash brainHashText) ...
+-- Unison infers from runAsyncSession's parameter type
+```
+
+### 6. Ambiguous constructor names must be qualified
+
+`Either.Left` and `snake.Direction.Left` both exist in the standard library + commonly installed libs. Writing bare `Left x` in a pattern or constructor is ambiguous. Qualify:
+
+```
+-- WRONG (ambiguous)
+match r with
+  Left e  -> ...
+  Right v -> ...
+
+-- RIGHT
+match r with
+  Either.Left e  -> ...
+  Either.Right v -> ...
+```
+
 ## Namespaces and Imports
 
 Unison uses a flat namespace with dot notation to organize code. You can import definitions using `use`:

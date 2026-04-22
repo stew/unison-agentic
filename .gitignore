@@ -1,2 +1,4 @@
 *.u
 .unisonHistory
+.envrc
+.envrc.private
